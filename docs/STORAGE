@@ -7,10 +7,10 @@
 
 
 ## Expiry
-- Workspace `envmon` expires on: <5.1.27>
-- I extend it on: <date>. Calendar reminder set: yes/no
+- Workspace `envmon` expires on: Tue Jan  5 11:28:27 2027
+- I extend it on: 4.1.27. Calendar reminder set: yes
 
 ## Backup
 - Code: GitHub is the second copy
-- Results I must keep: copied to my laptop on <date>
+- Results I must keep: copied to my laptop on 6.11.26
 - Raw data: original download source + <university storage>
