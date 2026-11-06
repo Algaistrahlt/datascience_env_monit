@@ -14,3 +14,5 @@ docs/     notes and templates
 
 ## Author
 Matti Allgaier
+newline
+Matti Allgaier, 06.11.2026
