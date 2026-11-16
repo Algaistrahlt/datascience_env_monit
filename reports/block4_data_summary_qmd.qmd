@@ -130,6 +130,63 @@ site-year is `r best$site` in `r best$year` (`r round(100 * best$measured)` %). 
 
 ## C3. Summary statistics
 
+Mean, minimum, maximum and share of missing half hours for each site. For
+precipitation (P_F), the *Mean* row gives the **mean annual sum** (mm per year);
+Min and Max of P_F refer to half-hourly values.
+
+```{r c3-stats}
+#| results: asis
+vars <- c(TA_F     = "TA_F (°C)",
+          SW_IN_F  = "SW_IN_F (W m⁻²)",
+          VPD_F    = "VPD_F (hPa)",
+          P_F      = "P_F (mm)",
+          NEE      = "NEE (µmol CO₂ m⁻² s⁻¹)",
+          GPP      = "GPP (µmol CO₂ m⁻² s⁻¹)",
+          RECO     = "RECO (µmol CO₂ m⁻² s⁻¹)",
+          H_F_MDS  = "H (W m⁻²)",
+          LE_F_MDS = "LE (W m⁻²)")
+
+# Statistiken für alle Variablen und Türme
+stats <- all_hh |>
+  select(site, all_of(names(vars))) |>
+  pivot_longer(-site, names_to = "var") |>
+  summarise(Mean        = mean(value, na.rm = TRUE),
+            Min         = min(value, na.rm = TRUE),
+            Max         = max(value, na.rm = TRUE),
+            `% missing` = 100 * mean(is.na(value)),
+            .by = c(site, var))
+
+# Niederschlag: mittlere Jahressumme statt Mittelwert
+p_annual <- all_hh |>
+  mutate(year = format(time, "%Y")) |>
+  summarise(p_sum = sum(P_F, na.rm = TRUE), .by = c(site, year)) |>
+  summarise(p_annual = mean(p_sum), .by = site)
+
+stats <- stats |>
+  left_join(p_annual, by = "site") |>
+  mutate(Mean = if_else(var == "P_F", p_annual, Mean)) |>
+  select(-p_annual)
+
+# Eine Tabelle pro Turm
+for (s in my_sites) {
+  cat("\n\n### ", s, "\n\n", sep = "")
+  tab <- stats |>
+    filter(site == s) |>
+    select(-site) |>
+    mutate(var = vars[var]) |>
+    pivot_longer(c(Mean, Min, Max, `% missing`), names_to = "Statistic") |>
+    pivot_wider(names_from = var, values_from = value)
+  cat(knitr::kable(tab, digits = 1), sep = "\n")
+}
+```
+**Note on precipitation.** At US-UiB and CN-Zha, P_F is identical to the ERA5
+reanalysis (P_ERA) in every year: no precipitation was measured at these towers,
+and the whole record is gap-filled from ERA5. The resulting annual sums
+(about 3,900 mm at US-UiB and 590 mm at CN-Zha) are roughly four times higher
+than the regional climate (about 1,000 mm in central Illinois and 100–200 mm
+around Zhangye). P_F at these two sites should therefore not be trusted.
+At BR-Ma2, IT-Tor and JP-Fhk, P_F is close to ERA5 and in a plausible range.
+
 ## C4. Time series
 
 ## C5. Diurnal cycles

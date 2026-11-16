@@ -2215,7 +2215,14 @@ vertical-align: -.125em;
   <ul>
   <li><a href="#c1.-site-overview" id="toc-c1.-site-overview" class="nav-link active" data-scroll-target="#c1.-site-overview">C1. Site overview</a></li>
   <li><a href="#c2.-data-coverage" id="toc-c2.-data-coverage" class="nav-link" data-scroll-target="#c2.-data-coverage">C2. Data coverage</a></li>
-  <li><a href="#c3.-summary-statistics" id="toc-c3.-summary-statistics" class="nav-link" data-scroll-target="#c3.-summary-statistics">C3. Summary statistics</a></li>
+  <li><a href="#c3.-summary-statistics" id="toc-c3.-summary-statistics" class="nav-link" data-scroll-target="#c3.-summary-statistics">C3. Summary statistics</a>
+  <ul class="collapse">
+  <li><a href="#br-ma2" id="toc-br-ma2" class="nav-link" data-scroll-target="#br-ma2">BR-Ma2</a></li>
+  <li><a href="#cn-zha" id="toc-cn-zha" class="nav-link" data-scroll-target="#cn-zha">CN-Zha</a></li>
+  <li><a href="#it-tor" id="toc-it-tor" class="nav-link" data-scroll-target="#it-tor">IT-Tor</a></li>
+  <li><a href="#jp-fhk" id="toc-jp-fhk" class="nav-link" data-scroll-target="#jp-fhk">JP-Fhk</a></li>
+  <li><a href="#us-uib" id="toc-us-uib" class="nav-link" data-scroll-target="#us-uib">US-UiB</a></li>
+  </ul></li>
   <li><a href="#c4.-time-series" id="toc-c4.-time-series" class="nav-link" data-scroll-target="#c4.-time-series">C4. Time series</a></li>
   <li><a href="#c5.-diurnal-cycles" id="toc-c5.-diurnal-cycles" class="nav-link" data-scroll-target="#c5.-diurnal-cycles">C5. Diurnal cycles</a></li>
   <li><a href="#c6.-my-reading" id="toc-c6.-my-reading" class="nav-link" data-scroll-target="#c6.-my-reading">C6. My reading</a></li>
@@ -2470,10 +2477,461 @@ vertical-align: -.125em;
 </div>
 </div>
 </div>
-<p>The best data come from US-UiB (on average 50 % measured NEE per year); the single best site-year is US-UiB in 2019 (68 %).</p>
+<p>The best data come from US-UiB (on average 50 % measured NEE per year); the single best site-year is US-UiB in 2019 (68 %). BR-Ma2 has the lowest share of measured NEE, espacially in the first half of recorded years</p>
 </section>
 <section id="c3.-summary-statistics" class="level2">
 <h2 class="anchored" data-anchor-id="c3.-summary-statistics">C3. Summary statistics</h2>
+<p>Mean, minimum, maximum and share of missing half hours for each site. For precipitation (P_F), the <em>Mean</em> row gives the <strong>mean annual sum</strong> (mm per year); Min and Max of P_F refer to half-hourly values.</p>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>vars <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="at">TA_F     =</span> <span class="st">&quot;TA_F (°C)&quot;</span>,</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>          <span class="at">SW_IN_F  =</span> <span class="st">&quot;SW_IN_F (W m⁻²)&quot;</span>,</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>          <span class="at">VPD_F    =</span> <span class="st">&quot;VPD_F (hPa)&quot;</span>,</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>          <span class="at">P_F      =</span> <span class="st">&quot;P_F (mm)&quot;</span>,</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>          <span class="at">NEE      =</span> <span class="st">&quot;NEE (µmol CO₂ m⁻² s⁻¹)&quot;</span>,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>          <span class="at">GPP      =</span> <span class="st">&quot;GPP (µmol CO₂ m⁻² s⁻¹)&quot;</span>,</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>          <span class="at">RECO     =</span> <span class="st">&quot;RECO (µmol CO₂ m⁻² s⁻¹)&quot;</span>,</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>          <span class="at">H_F_MDS  =</span> <span class="st">&quot;H (W m⁻²)&quot;</span>,</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>          <span class="at">LE_F_MDS =</span> <span class="st">&quot;LE (W m⁻²)&quot;</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Statistiken für alle Variablen und Türme</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>stats <span class="ot">&lt;-</span> all_hh <span class="sc">|&gt;</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(site, <span class="fu">all_of</span>(<span class="fu">names</span>(vars))) <span class="sc">|&gt;</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="sc">-</span>site, <span class="at">names_to =</span> <span class="st">&quot;var&quot;</span>) <span class="sc">|&gt;</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(<span class="at">Mean        =</span> <span class="fu">mean</span>(value, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>            <span class="at">Min         =</span> <span class="fu">min</span>(value, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>            <span class="at">Max         =</span> <span class="fu">max</span>(value, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">% missing</span><span class="st">`</span> <span class="ot">=</span> <span class="dv">100</span> <span class="sc">*</span> <span class="fu">mean</span>(<span class="fu">is.na</span>(value)),</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>            <span class="at">.by =</span> <span class="fu">c</span>(site, var))</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Niederschlag: mittlere Jahressumme statt Mittelwert</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>p_annual <span class="ot">&lt;-</span> all_hh <span class="sc">|&gt;</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">year =</span> <span class="fu">format</span>(time, <span class="st">&quot;%Y&quot;</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(<span class="at">p_sum =</span> <span class="fu">sum</span>(P_F, <span class="at">na.rm =</span> <span class="cn">TRUE</span>), <span class="at">.by =</span> <span class="fu">c</span>(site, year)) <span class="sc">|&gt;</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(<span class="at">p_annual =</span> <span class="fu">mean</span>(p_sum), <span class="at">.by =</span> site)</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>stats <span class="ot">&lt;-</span> stats <span class="sc">|&gt;</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(p_annual, <span class="at">by =</span> <span class="st">&quot;site&quot;</span>) <span class="sc">|&gt;</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">Mean =</span> <span class="fu">if_else</span>(var <span class="sc">==</span> <span class="st">&quot;P_F&quot;</span>, p_annual, Mean)) <span class="sc">|&gt;</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>p_annual)</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a><span class="co"># Eine Tabelle pro Turm</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (s <span class="cf">in</span> my_sites) {</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">&quot;</span><span class="sc">\n\n</span><span class="st">### &quot;</span>, s, <span class="st">&quot;</span><span class="sc">\n\n</span><span class="st">&quot;</span>, <span class="at">sep =</span> <span class="st">&quot;&quot;</span>)</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>  tab <span class="ot">&lt;-</span> stats <span class="sc">|&gt;</span></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="fu">filter</span>(site <span class="sc">==</span> s) <span class="sc">|&gt;</span></span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">select</span>(<span class="sc">-</span>site) <span class="sc">|&gt;</span></span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">var =</span> vars[var]) <span class="sc">|&gt;</span></span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    <span class="fu">pivot_longer</span>(<span class="fu">c</span>(Mean, Min, Max, <span class="st">`</span><span class="at">% missing</span><span class="st">`</span>), <span class="at">names_to =</span> <span class="st">&quot;Statistic&quot;</span>) <span class="sc">|&gt;</span></span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>    <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> var, <span class="at">values_from =</span> value)</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(knitr<span class="sc">::</span><span class="fu">kable</span>(tab, <span class="at">digits =</span> <span class="dv">1</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<section id="br-ma2" class="level3">
+<h3 class="anchored" data-anchor-id="br-ma2">BR-Ma2</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 6%">
+<col style="width: 6%">
+<col style="width: 10%">
+<col style="width: 8%">
+<col style="width: 6%">
+<col style="width: 15%">
+<col style="width: 15%">
+<col style="width: 16%">
+<col style="width: 6%">
+<col style="width: 7%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Statistic</th>
+<th style="text-align: right;">TA_F (°C)</th>
+<th style="text-align: right;">SW_IN_F (W m⁻²)</th>
+<th style="text-align: right;">VPD_F (hPa)</th>
+<th style="text-align: right;">P_F (mm)</th>
+<th style="text-align: right;">NEE (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">GPP (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">RECO (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">H (W m⁻²)</th>
+<th style="text-align: right;">LE (W m⁻²)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Mean</td>
+<td style="text-align: right;">25.8</td>
+<td style="text-align: right;">191.0</td>
+<td style="text-align: right;">6.0</td>
+<td style="text-align: right;">2548.8</td>
+<td style="text-align: right;">-1.1</td>
+<td style="text-align: right;">8.8</td>
+<td style="text-align: right;">7.9</td>
+<td style="text-align: right;">28.0</td>
+<td style="text-align: right;">89.6</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Min</td>
+<td style="text-align: right;">18.7</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-78.5</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-100.0</td>
+<td style="text-align: right;">-50.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Max</td>
+<td style="text-align: right;">36.4</td>
+<td style="text-align: right;">1362.3</td>
+<td style="text-align: right;">43.6</td>
+<td style="text-align: right;">64.8</td>
+<td style="text-align: right;">49.9</td>
+<td style="text-align: right;">66.2</td>
+<td style="text-align: right;">42.8</td>
+<td style="text-align: right;">499.7</td>
+<td style="text-align: right;">799.2</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">% missing</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">16.3</td>
+<td style="text-align: right;">16.9</td>
+<td style="text-align: right;">16.9</td>
+<td style="text-align: right;">3.8</td>
+<td style="text-align: right;">7.4</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cn-zha" class="level3">
+<h3 class="anchored" data-anchor-id="cn-zha">CN-Zha</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 6%">
+<col style="width: 6%">
+<col style="width: 10%">
+<col style="width: 8%">
+<col style="width: 6%">
+<col style="width: 15%">
+<col style="width: 15%">
+<col style="width: 16%">
+<col style="width: 6%">
+<col style="width: 7%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Statistic</th>
+<th style="text-align: right;">TA_F (°C)</th>
+<th style="text-align: right;">SW_IN_F (W m⁻²)</th>
+<th style="text-align: right;">VPD_F (hPa)</th>
+<th style="text-align: right;">P_F (mm)</th>
+<th style="text-align: right;">NEE (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">GPP (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">RECO (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">H (W m⁻²)</th>
+<th style="text-align: right;">LE (W m⁻²)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Mean</td>
+<td style="text-align: right;">9.7</td>
+<td style="text-align: right;">189.7</td>
+<td style="text-align: right;">9.4</td>
+<td style="text-align: right;">585.0</td>
+<td style="text-align: right;">-1.7</td>
+<td style="text-align: right;">3.6</td>
+<td style="text-align: right;">1.9</td>
+<td style="text-align: right;">12.5</td>
+<td style="text-align: right;">96.8</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Min</td>
+<td style="text-align: right;">-24.1</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.2</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-51.2</td>
+<td style="text-align: right;">-31.1</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-229.1</td>
+<td style="text-align: right;">-189.3</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Max</td>
+<td style="text-align: right;">38.7</td>
+<td style="text-align: right;">1107.3</td>
+<td style="text-align: right;">56.8</td>
+<td style="text-align: right;">10.1</td>
+<td style="text-align: right;">33.4</td>
+<td style="text-align: right;">54.8</td>
+<td style="text-align: right;">14.2</td>
+<td style="text-align: right;">516.6</td>
+<td style="text-align: right;">999.6</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">% missing</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">5.4</td>
+<td style="text-align: right;">5.4</td>
+<td style="text-align: right;">5.4</td>
+<td style="text-align: right;">5.3</td>
+<td style="text-align: right;">5.3</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="it-tor" class="level3">
+<h3 class="anchored" data-anchor-id="it-tor">IT-Tor</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 6%">
+<col style="width: 6%">
+<col style="width: 10%">
+<col style="width: 8%">
+<col style="width: 6%">
+<col style="width: 15%">
+<col style="width: 15%">
+<col style="width: 16%">
+<col style="width: 6%">
+<col style="width: 7%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Statistic</th>
+<th style="text-align: right;">TA_F (°C)</th>
+<th style="text-align: right;">SW_IN_F (W m⁻²)</th>
+<th style="text-align: right;">VPD_F (hPa)</th>
+<th style="text-align: right;">P_F (mm)</th>
+<th style="text-align: right;">NEE (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">GPP (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">RECO (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">H (W m⁻²)</th>
+<th style="text-align: right;">LE (W m⁻²)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Mean</td>
+<td style="text-align: right;">3.6</td>
+<td style="text-align: right;">165.9</td>
+<td style="text-align: right;">3.0</td>
+<td style="text-align: right;">862.9</td>
+<td style="text-align: right;">-0.2</td>
+<td style="text-align: right;">2.2</td>
+<td style="text-align: right;">2.1</td>
+<td style="text-align: right;">18.2</td>
+<td style="text-align: right;">38.7</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Min</td>
+<td style="text-align: right;">-23.6</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-31.6</td>
+<td style="text-align: right;">-23.3</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-245.5</td>
+<td style="text-align: right;">-242.2</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Max</td>
+<td style="text-align: right;">25.8</td>
+<td style="text-align: right;">1284.0</td>
+<td style="text-align: right;">27.2</td>
+<td style="text-align: right;">45.4</td>
+<td style="text-align: right;">24.7</td>
+<td style="text-align: right;">35.1</td>
+<td style="text-align: right;">9.5</td>
+<td style="text-align: right;">522.5</td>
+<td style="text-align: right;">598.2</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">% missing</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">2.3</td>
+<td style="text-align: right;">2.3</td>
+<td style="text-align: right;">2.3</td>
+<td style="text-align: right;">2.3</td>
+<td style="text-align: right;">2.3</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="jp-fhk" class="level3">
+<h3 class="anchored" data-anchor-id="jp-fhk">JP-Fhk</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 6%">
+<col style="width: 6%">
+<col style="width: 10%">
+<col style="width: 8%">
+<col style="width: 6%">
+<col style="width: 15%">
+<col style="width: 15%">
+<col style="width: 16%">
+<col style="width: 6%">
+<col style="width: 7%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Statistic</th>
+<th style="text-align: right;">TA_F (°C)</th>
+<th style="text-align: right;">SW_IN_F (W m⁻²)</th>
+<th style="text-align: right;">VPD_F (hPa)</th>
+<th style="text-align: right;">P_F (mm)</th>
+<th style="text-align: right;">NEE (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">GPP (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">RECO (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">H (W m⁻²)</th>
+<th style="text-align: right;">LE (W m⁻²)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Mean</td>
+<td style="text-align: right;">9.8</td>
+<td style="text-align: right;">168.3</td>
+<td style="text-align: right;">2.8</td>
+<td style="text-align: right;">1845.5</td>
+<td style="text-align: right;">-0.5</td>
+<td style="text-align: right;">4.8</td>
+<td style="text-align: right;">4.3</td>
+<td style="text-align: right;">41.5</td>
+<td style="text-align: right;">42.2</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Min</td>
+<td style="text-align: right;">-12.9</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-49.8</td>
+<td style="text-align: right;">-48.4</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-219.8</td>
+<td style="text-align: right;">-222.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Max</td>
+<td style="text-align: right;">32.4</td>
+<td style="text-align: right;">1208.2</td>
+<td style="text-align: right;">29.9</td>
+<td style="text-align: right;">47.2</td>
+<td style="text-align: right;">48.8</td>
+<td style="text-align: right;">62.4</td>
+<td style="text-align: right;">21.7</td>
+<td style="text-align: right;">719.4</td>
+<td style="text-align: right;">717.3</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">% missing</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="us-uib" class="level3">
+<h3 class="anchored" data-anchor-id="us-uib">US-UiB</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 6%">
+<col style="width: 6%">
+<col style="width: 10%">
+<col style="width: 8%">
+<col style="width: 6%">
+<col style="width: 15%">
+<col style="width: 15%">
+<col style="width: 16%">
+<col style="width: 6%">
+<col style="width: 7%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Statistic</th>
+<th style="text-align: right;">TA_F (°C)</th>
+<th style="text-align: right;">SW_IN_F (W m⁻²)</th>
+<th style="text-align: right;">VPD_F (hPa)</th>
+<th style="text-align: right;">P_F (mm)</th>
+<th style="text-align: right;">NEE (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">GPP (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">RECO (µmol CO₂ m⁻² s⁻¹)</th>
+<th style="text-align: right;">H (W m⁻²)</th>
+<th style="text-align: right;">LE (W m⁻²)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Mean</td>
+<td style="text-align: right;">11.8</td>
+<td style="text-align: right;">175.8</td>
+<td style="text-align: right;">5.5</td>
+<td style="text-align: right;">3922.4</td>
+<td style="text-align: right;">-2.3</td>
+<td style="text-align: right;">5.1</td>
+<td style="text-align: right;">3.0</td>
+<td style="text-align: right;">19.3</td>
+<td style="text-align: right;">46.8</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Min</td>
+<td style="text-align: right;">-27.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-64.4</td>
+<td style="text-align: right;">-40.9</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">-186.9</td>
+<td style="text-align: right;">-99.4</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Max</td>
+<td style="text-align: right;">40.3</td>
+<td style="text-align: right;">1146.0</td>
+<td style="text-align: right;">54.4</td>
+<td style="text-align: right;">41.0</td>
+<td style="text-align: right;">45.8</td>
+<td style="text-align: right;">73.1</td>
+<td style="text-align: right;">15.4</td>
+<td style="text-align: right;">583.8</td>
+<td style="text-align: right;">797.1</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">% missing</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">4.9</td>
+<td style="text-align: right;">22.0</td>
+<td style="text-align: right;">22.0</td>
+<td style="text-align: right;">4.9</td>
+<td style="text-align: right;">4.9</td>
+</tr>
+</tbody>
+</table>
+</section>
 </section>
 <section id="c4.-time-series" class="level2">
 <h2 class="anchored" data-anchor-id="c4.-time-series">C4. Time series</h2>
