@@ -1,0 +1,380 @@
+---
+title: "Data summary of my five flux towers"
+author: "Matti Allgaier"
+date: today
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+execute:
+  warning: false
+  message: false
+---
+
+
+```{r setup}
+#| include: false
+# Alle Pfade relativ zum Projektordner, nicht zum Ordner reports/
+knitr::opts_knit$set(root.dir = normalizePath(".."))
+```
+
+```{r load-data}
+#| include: false
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+source("scripts/read_hh.R")
+
+# Beim ersten Mal alle Türme einlesen und als .rds zwischenspeichern,
+# danach geht das Rendern viel schneller.
+cache_file <- "data/processed/all_hh.rds"
+if (file.exists(cache_file)) {
+  all_hh <- readRDS(cache_file)
+} else {
+  zips   <- list.files("data/raw", pattern = "\\.zip$", full.names = TRUE)
+  all_hh <- bind_rows(lapply(zips, read_hh))
+  saveRDS(all_hh, cache_file)
+}
+
+snapshot_file <- list.files("data/snapshots", pattern = "\\.csv$", full.names = TRUE)[1]
+snapshot      <- read_csv(snapshot_file, show_col_types = FALSE)
+```
+
+## C1. Site overview
+
+The five towers were downloaded with the FLUXNET Shuttle. The snapshot file
+`r basename(snapshot_file)` records what was downloaded. The data files are:
+`r paste(basename(list.files("data/raw", pattern = "\\.zip$")), collapse = ", ")`.
+
+```{r c1-table}
+my_sites  <- sort(unique(all_hh$site))
+countries <- c(BR = "Brazil", CN = "China", IT = "Italy", JP = "Japan", US = "USA")
+
+sites <- snapshot |>
+  filter(site_id %in% my_sites) |>
+  distinct(site_id, .keep_all = TRUE) |>
+  mutate(country = countries[substr(site_id, 1, 2)])
+
+sites |>
+  select(`Site ID` = site_id, Name = site_name, Country = country, IGBP = igbp,
+         `Lat (°)` = location_lat, `Lon (°)` = location_long,
+         `First year` = first_year, `Last year` = last_year,
+         Hub = data_hub, Citation = product_citation) |>
+  knitr::kable(digits = 2)
+```
+
+```{r c1-map}
+#| fig-cap: "Location of the five flux towers."
+world <- map_data("world")
+
+ggplot() +
+  geom_polygon(data = world, aes(long, lat, group = group),
+               fill = "grey90", colour = "grey70", linewidth = 0.1) +
+  geom_point(data = sites, aes(location_long, location_lat),
+             colour = "red", size = 3) +
+  geom_text(data = sites, aes(location_long, location_lat, label = site_id),
+            nudge_y = 7, size = 3.5) +
+  coord_quickmap() +
+  labs(x = "Longitude (°)", y = "Latitude (°)") +
+  theme_minimal()
+```
+
+**Variables used.** NEE, GPP and RECO are the `_REF` products. Where available,
+the variable u* threshold (VUT) and night-time partitioning (NT) were used.
+Where these were empty, the constant u* threshold (CUT) or day-time
+partitioning (DT) was used instead:
+
+```{r c1-variables}
+all_hh |>
+  distinct(Site = site, `u* threshold` = ustar, Partitioning = partition) |>
+  knitr::kable()
+```
+
+Time stamps are local standard time (no daylight saving). They are stored with
+`tz = "UTC"` only as a technical container.
+
+
+## C2. Data coverage
+
+Share of half hours per site and year in which NEE was measured
+(`NEE_QC == 0`) and not gap-filled.
+
+```{r c2-coverage}
+#| fig-cap: "Share of measured (not gap-filled) NEE half hours per site and year."
+#| fig-height: 3.5
+coverage <- all_hh |>
+  mutate(year = as.integer(format(time, "%Y"))) |>
+  summarise(measured = mean(NEE_QC %in% 0), .by = c(site, year))
+
+ggplot(coverage, aes(year, site, fill = measured)) +
+  geom_tile(colour = "white") +
+  scale_fill_viridis_c(name = "Measured NEE", labels = scales::percent,
+                       limits = c(0, 1)) +
+  labs(x = "Year", y = "Site") +
+  theme_minimal()
+```
+
+```{r c2-best}
+#| include: false
+best      <- coverage |> slice_max(measured, n = 1)
+site_mean <- coverage |> summarise(measured = mean(measured), .by = site) |>
+  arrange(desc(measured))
+```
+
+The best data come from `r site_mean$site[1]` (on average
+`r round(100 * site_mean$measured[1])` % measured NEE per year); the single best
+site-year is `r best$site` in `r best$year` (`r round(100 * best$measured)` %). BR-Ma2 has the lowest share of measured NEE, espacially in the first half of recorded years
+
+## C3. Summary statistics
+
+Mean, minimum, maximum and share of missing half hours for each site. For
+precipitation (P_F), the *Mean* row gives the **mean annual sum** (mm per year);
+Min and Max of P_F refer to half-hourly values.
+
+```{r c3-stats}
+#| results: asis
+vars <- c(TA_F     = "TA_F (°C)",
+          SW_IN_F  = "SW_IN_F (W m⁻²)",
+          VPD_F    = "VPD_F (hPa)",
+          P_F      = "P_F (mm)",
+          NEE      = "NEE (µmol CO₂ m⁻² s⁻¹)",
+          GPP      = "GPP (µmol CO₂ m⁻² s⁻¹)",
+          RECO     = "RECO (µmol CO₂ m⁻² s⁻¹)",
+          H_F_MDS  = "H (W m⁻²)",
+          LE_F_MDS = "LE (W m⁻²)")
+
+# Statistiken für alle Variablen und Türme
+stats <- all_hh |>
+  select(site, all_of(names(vars))) |>
+  pivot_longer(-site, names_to = "var") |>
+  summarise(Mean        = mean(value, na.rm = TRUE),
+            Min         = min(value, na.rm = TRUE),
+            Max         = max(value, na.rm = TRUE),
+            `% missing` = 100 * mean(is.na(value)),
+            .by = c(site, var))
+
+# Niederschlag: mittlere Jahressumme statt Mittelwert
+p_annual <- all_hh |>
+  mutate(year = format(time, "%Y")) |>
+  summarise(p_sum = sum(P_F, na.rm = TRUE), .by = c(site, year)) |>
+  summarise(p_annual = mean(p_sum), .by = site)
+
+stats <- stats |>
+  left_join(p_annual, by = "site") |>
+  mutate(Mean = if_else(var == "P_F", p_annual, Mean)) |>
+  select(-p_annual)
+
+# Eine Tabelle pro Turm
+for (s in my_sites) {
+  cat("\n\n### ", s, "\n\n", sep = "")
+  tab <- stats |>
+    filter(site == s) |>
+    select(-site) |>
+    mutate(var = vars[var]) |>
+    pivot_longer(c(Mean, Min, Max, `% missing`), names_to = "Statistic") |>
+    pivot_wider(names_from = var, values_from = value)
+  cat(knitr::kable(tab, digits = 1), sep = "\n")
+}
+```
+**Note on precipitation.** At US-UiB and CN-Zha, P_F is identical to the ERA5
+reanalysis (P_ERA) in every year: no precipitation was measured at these towers,
+and the whole record is gap-filled from ERA5. The resulting annual sums
+(about 3,900 mm at US-UiB and 590 mm at CN-Zha) are roughly four times higher
+than the regional climate (about 1,000 mm in central Illinois and 100–200 mm
+around Zhangye). P_F at these two sites should therefore not be trusted.
+At BR-Ma2, IT-Tor and JP-Fhk, P_F is close to ERA5 and in a plausible range.
+
+## C4. Time series
+
+Daily values were aggregated from the half-hourly data as the daily mean
+(µmol CO₂ m⁻² s⁻¹) and converted to g C m⁻² d⁻¹ with the factor 1.0378
+(86 400 s × 12.011 g mol⁻¹ × 10⁻⁶). Days with missing half hours are left empty.
+
+```{r c4-daily}
+daily <- all_hh |>
+  mutate(date = as.Date(time)) |>
+  summarise(across(c(NEE, GPP, RECO), ~ mean(.x) * 1.0378),
+            .by = c(site, date))
+```
+
+```{r c4-plot}
+#| fig-cap: "Daily NEE, GPP and RECO for each site."
+#| fig-height: 11
+daily |>
+  pivot_longer(c(NEE, GPP, RECO), names_to = "flux") |>
+  ggplot(aes(date, value, colour = flux)) +
+  geom_line(linewidth = 0.2, alpha = 0.8) +
+  facet_wrap(~ site, ncol = 1, scales = "free_x") +
+  scale_colour_manual(values = c(GPP = "darkgreen", RECO = "darkorange", NEE = "black")) +
+  labs(x = "Date", y = "Daily flux (g C m⁻² d⁻¹)", colour = NULL) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+### Check against the daily FLUXMET_DD file
+
+```{r c4-check}
+#| fig-cap: "Own daily NEE aggregation vs. the official FLUXMET_DD file (JP-Fhk)."
+#| fig-height: 4
+z       <- list.files("data/raw", pattern = "JP-Fhk.*\\.zip$", full.names = TRUE)
+dd_name <- grep("FLUXMET_DD", unzip(z, list = TRUE)$Name, value = TRUE)
+
+dd <- read_csv(unz(z, dd_name), na = "-9999",
+               col_select = c(TIMESTAMP, NEE_VUT_REF),
+               col_types = cols(TIMESTAMP = "c", .default = "d")) |>
+  mutate(date = as.Date(TIMESTAMP, format = "%Y%m%d"))
+
+cmp <- daily |>
+  filter(site == "JP-Fhk") |>
+  inner_join(dd, by = "date")
+
+ggplot(cmp, aes(NEE_VUT_REF, NEE)) +
+  geom_point(size = 0.4, alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  labs(x = "NEE from FLUXMET_DD (g C m⁻² d⁻¹)",
+       y = "Own daily NEE (g C m⁻² d⁻¹)") +
+  coord_equal() +
+  theme_minimal()
+```
+
+For JP-Fhk, the own aggregation agrees with the official daily file:
+r = `r round(cor(cmp$NEE, cmp$NEE_VUT_REF, use = "complete.obs"), 4)`,
+mean absolute difference = `r signif(mean(abs(cmp$NEE - cmp$NEE_VUT_REF), na.rm = TRUE), 2)` g C m⁻² d⁻¹.
+
+## C5. Diurnal cycles
+
+Seasons were defined from the month and the latitude of each site. In the
+northern hemisphere, spring is March–May, summer June–August, autumn
+September–November and winter December–February. For sites with a negative
+latitude (here only BR-Ma2), the months were shifted by six months, so that
+for example January counts as summer. BR-Ma2 lies almost on the equator
+(`r abs(round(sites$location_lat[sites$site_id == "BR-Ma2"], 1))`° S), so its
+"seasons" are weak and mainly reflect wet and dry periods. Hours are local
+standard time (start of the half hour).
+
+```{r c5-diurnal}
+#| fig-cap: "Mean diurnal cycle of NEE and LE per season for all five sites."
+#| fig-height: 6
+#| fig-width: 10
+season_nh <- c("Winter", "Winter", "Spring", "Spring", "Spring", "Summer",
+               "Summer", "Summer", "Autumn", "Autumn", "Autumn", "Winter")
+
+diurnal <- all_hh |>
+  left_join(sites |> select(site = site_id, lat = location_lat), by = "site") |>
+  mutate(month  = as.integer(format(time, "%m")),
+         # Südhalbkugel: Monate um 6 verschieben (Januar -> Juli usw.)
+         month_adj = if_else(lat < 0, (month + 5) %% 12 + 1, month),
+         season = factor(season_nh[month_adj],
+                         levels = c("Spring", "Summer", "Autumn", "Winter")),
+         hour   = as.numeric(format(time, "%H")) + as.numeric(format(time, "%M")) / 60) |>
+  summarise(`NEE (µmol CO₂ m⁻² s⁻¹)` = mean(NEE, na.rm = TRUE),
+            `LE (W m⁻²)`             = mean(LE_F_MDS, na.rm = TRUE),
+            .by = c(site, season, hour))
+
+diurnal |>
+  pivot_longer(-c(site, season, hour), names_to = "variable") |>
+  ggplot(aes(hour, value, colour = site)) +
+  geom_line(linewidth = 0.7) +
+  facet_grid(variable ~ season, scales = "free_y", switch = "y") +
+  scale_x_continuous(breaks = seq(0, 24, 6)) +
+  labs(x = "Hour of day (local standard time)", y = NULL, colour = "Site") +
+  theme_minimal(base_size=13) +
+  theme(strip.placement = "outside", legend.position = "top")
+```
+
+## C6. My reading
+
+### Energy balance (JP-Fhk)
+
+Only half hours in which both H and LE were measured (`_QC == 0`) are used.
+
+```{r c6-energy}
+#| fig-cap: "Energy balance at JP-Fhk: turbulent fluxes vs. available energy (measured half hours only)."
+#| fig-height: 5
+eb <- all_hh |>
+  filter(site == "JP-Fhk", H_F_MDS_QC == 0, LE_F_MDS_QC == 0) |>
+  mutate(available = NETRAD - G_F_MDS,
+         turbulent = H_F_MDS + LE_F_MDS) |>
+  filter(!is.na(available), !is.na(turbulent))
+
+fit   <- lm(turbulent ~ available, data = eb)
+slope <- coef(fit)[["available"]]
+
+ggplot(eb, aes(available, turbulent)) +
+  geom_point(size = 0.3, alpha = 0.1) +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  geom_smooth(method = "lm", colour = "blue", se = FALSE) +
+  annotate("text", x = -Inf, y = Inf, hjust = -0.1, vjust = 1.5,
+           label = paste0("slope = ", round(slope, 2), " (n = ", nrow(eb), ")")) +
+  labs(x = "NETRAD − G (W m⁻²)", y = "H + LE (W m⁻²)") +
+  coord_equal() +
+  theme_minimal(base_size = 13)
+```
+
+The slope of the linear fit is `r round(slope, 2)` (red line: 1:1).
+
+### Comparison of the towers
+
+```{r c6-numbers}
+# Jährliche NEE-Summe: µmol m⁻² s⁻¹ × 1800 s × 12.011e-6 g/µmol = g C pro Halbstunde
+annual <- all_hh |>
+  mutate(year = format(time, "%Y")) |>
+  summarise(nee_sum = sum(NEE * 1800 * 12.011e-6), .by = c(site, year)) |>
+  filter(!is.na(nee_sum)) |>                       # nur vollständige Jahre
+  summarise(`Mean annual NEE (g C m⁻² yr⁻¹)` = mean(nee_sum),
+            `Complete years` = n(), .by = site)
+
+# Jahresgang: Spannweite der mittleren monatlichen GPP (Tageswerte aus C4)
+seasonal <- daily |>
+  mutate(month = format(date, "%m")) |>
+  summarise(gpp = mean(GPP, na.rm = TRUE), .by = c(site, month)) |>
+  summarise(`GPP seasonal amplitude (g C m⁻² d⁻¹)` = max(gpp) - min(gpp), .by = site)
+
+# Anteil lückengefüllter NEE-Halbstunden
+gapfilled <- all_hh |>
+  summarise(`Gap-filled NEE (%)` = 100 * mean(!(NEE_QC %in% 0)), .by = site)
+
+annual |>
+  left_join(seasonal, by = "site") |>
+  left_join(gapfilled, by = "site") |>
+  rename(Site = site) |>
+  knitr::kable(digits = 1)
+```
+
+The highest carbon uptake occurs at the Illinois tower (US-UiB), which surprised
+me, considering that one of my towers is located in the Amazon rainforest. This
+could partly be explained by the high share of gap-filled NEE values at the
+Manaus tower (76 %) and the fact that only seven complete years are available
+there. What seems to be the highest carbon uptake is not nessesarily a proxy for the highest productivity because its cropland and the carbon (fruits) get harvested. US-UiB also shows the largest seasonal cycle in GPP. The lowest carbon
+uptake occurs at the tower in the Aosta Valley (IT-Tor), which could be explained
+by the short growing season at high altitude. At JP-Fhk, the turbulent fluxes
+(H + LE) account for about `r round(100 * slope)` % of the available energy
+(slope = `r round(slope, 2)`), so the energy balance is not fully closed.
+
+## Data and citation
+
+**Site data.** Each site's data citation, taken from the snapshot file
+`r basename(snapshot_file)`:
+
+```{r citations}
+#| results: asis
+#| echo: false
+cat(paste0("- **", sites$site_id, "**: ", sites$product_citation), sep = "\n")
+```
+
+**FLUXNET processing.** Pastorello, G. et al. (2020): The FLUXNET2015 dataset
+and the ONEFlux processing pipeline for eddy covariance data. *Scientific Data*
+7, 225. <https://doi.org/10.1038/s41597-020-0534-3>
+
+**Data products.** FLUXNET data products (ONEFlux v1.3), downloaded with the
+FLUXNET Shuttle from AmeriFlux and the ICOS Carbon Portal. Licence: CC-BY-4.0.
+
+**Acknowledgement.**
+
+> FLUXNET data products were produced and harmonized by eddy covariance regional networks and data
+> processing centers, including AmeriFlux, ChinaFlux, European Fluxes Database, ICOS, JapanFlux, KoFlux,
+> OzFlux, SAEON, and TERN. These products also include a modified version of ERA5 hourly data provided by
+> the Copernicus Climate Change Service.s
