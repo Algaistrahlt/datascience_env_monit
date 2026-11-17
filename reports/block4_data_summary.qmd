@@ -180,12 +180,35 @@ for (s in my_sites) {
 }
 ```
 **Note on precipitation.** At US-UiB and CN-Zha, P_F is identical to the ERA5
-reanalysis (P_ERA) in every year: no precipitation was measured at these towers,
-and the whole record is gap-filled from ERA5. The resulting annual sums
-(about 3,900 mm at US-UiB and 590 mm at CN-Zha) are roughly four times higher
-than the regional climate (about 1,000 mm in central Illinois and 100–200 mm
-around Zhangye). P_F at these two sites should therefore not be trusted.
-At BR-Ma2, IT-Tor and JP-Fhk, P_F is close to ERA5 and in a plausible range.
+reanalysis (P_ERA) in every year, i.e. no precipitation was measured at these
+towers and the whole record is gap-filled from ERA5. The annual sums are
+roughly four times higher than the regional climate (about 1,000 mm in central
+Illinois and 100–200 mm around Zhangye). To rule out an error in my own
+aggregation, I compared my annual sums from the half-hourly data with the
+annual files of the data product:
+
+```{r c3-precip-check}
+p_compare <- lapply(c("US-UiB", "CN-Zha"), function(s) {
+  z     <- list.files("data/raw", pattern = paste0(s, ".*\\.zip$"), full.names = TRUE)
+  files <- unzip(z, list = TRUE)$Name
+  era <- read_csv(unz(z, grep("ERA5_YY", files, value = TRUE)),
+                  na = "-9999", show_col_types = FALSE)
+  yy  <- read_csv(unz(z, grep("FLUXMET_YY", files, value = TRUE)),
+                  na = "-9999", show_col_types = FALSE)
+  tibble(Site = s,
+         `Own sum from HH (mm yr⁻¹)` = p_annual$p_annual[p_annual$site == s],
+         `FLUXMET_YY P_F (mm yr⁻¹)`  = mean(yy$P_F, na.rm = TRUE),
+         `ERA5_YY P_ERA (mm yr⁻¹)`   = mean(era$P_ERA[era$TIMESTAMP %in% yy$TIMESTAMP],
+                                            na.rm = TRUE))
+})
+bind_rows(p_compare) |> knitr::kable(digits = 0)
+```
+
+All three values agree, and the half-hourly files contain 48 time steps per day
+(17,520 or 17,568 per year). The overestimation is therefore not caused by my
+aggregation but is already present in the data product (ERA5-based P_F).
+P_F at these two sites is not interpreted further. At BR-Ma2, IT-Tor and
+JP-Fhk, P_F is close to ERA5 and in a plausible range.
 
 ## C4. Time series
 
@@ -353,6 +376,11 @@ uptake occurs at the tower in the Aosta Valley (IT-Tor), which could be explaine
 by the short growing season at high altitude. At JP-Fhk, the turbulent fluxes
 (H + LE) account for about `r round(100 * slope)` % of the available energy
 (slope = `r round(slope, 2)`), so the energy balance is not fully closed.
+
+Note that GPP and RECO at BR-Ma2 come from the day-time partitioning (DT),
+while all other sites use the night-time method (NT). The two methods can
+give different GPP and RECO, so the comparison of BR-Ma2 with the other
+sites is less direct.
 
 ## Data and citation
 
