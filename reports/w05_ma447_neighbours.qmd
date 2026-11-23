@@ -43,6 +43,22 @@ traits <- read_csv("data/external/planttraits/planttraits_my_sites.csv", show_co
 
 ## 1. Data and provenance
 
+Five external datasets were added to the FLUXNET data from Block 4. All were
+downloaded with the Block 5 scripts and are stored in `data/external/`.
+
+```{r provenance}
+tibble::tribble(
+  ~Dataset,          ~Source,                                ~Resolution,              ~Period,                  ~`Accessed`,   ~Citation,
+  "FLUXNET (ONEFlux v1.3)", "FLUXNET Shuttle (AmeriFlux, ICOS)", "tower, 30 min",        "tower years (1999–2025)", "2026-11-13", "Site citations (see Block 4); Pastorello et al. (2020)",
+  "SoilGrids 2.0",   "ISRIC, rest.isric.org",                "250 m, 6 depths",        "static",                 "2026-11-20", "Poggio et al. (2021) SOIL 7, 217–240",
+  "PlantTraits",     "planttraits.earth / Zenodo",           "1 km",                   "static",                 "2026-11-20", "Lusk et al. (2026) Nat. Commun. 17, 1203; doi.org/10.5281/zenodo.14646322",
+  "WorldClim 2.1",   "worldclim.org (via geodata)",          "5′ (~9 km)",             "1970–2000 normals",      "2026-11-20", "Fick & Hijmans (2017) Int. J. Climatol. 37, 4302–4315",
+  "iNaturalist",     "api.inaturalist.org/v1",               "points, 5 km radius",    "all records to date",    "2026-11-20", "iNaturalist contributors (2026), accessed 2026-11-20",
+  "MODIS MOD13Q1",   "ORNL DAAC subset service",             "250 m, 16 days (9 × 9 px)", "last 3 tower years",   "2026-11-23", "Didan (2021) doi.org/10.5067/MODIS/MOD13Q1.061; ORNL DAAC doi.org/10.3334/ORNLDAAC/1557"
+) |>
+  knitr::kable()
+```
+
 ## 2. Site portrait
 
 ## 3. Greenness and GPP
