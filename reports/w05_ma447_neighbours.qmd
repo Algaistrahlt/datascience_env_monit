@@ -61,7 +61,143 @@ tibble::tribble(
 
 ## 2. Site portrait
 
+All values come from `data/processed/site_static.csv` (built by
+`09_merge.R`). Soil values are thickness-weighted means over 0–30 cm.
+
+```{r portrait-data}
+site_static <- read_csv("data/processed/site_static.csv", show_col_types = FALSE)
+```
+
+### Climate (WorldClim 2.1, 1970–2000)
+
+```{r portrait-climate}
+site_static |>
+      mutate(lat = paste0(abs(round(lat, 2)), "° ", if_else(lat < 0, "S", "N")),
+         lon = paste0(abs(round(lon, 2)), "° ", if_else(lon < 0, "W", "E"))) |>
+  select(Site = site_id, IGBP = igbp,
+        Lat = lat, Lon = lon,
+         `BIO1 mean temp. (°C)` = BIO1,
+         `BIO4 temp. seasonality (°C × 100)` = BIO4,
+         `BIO12 annual precip. (mm)` = BIO12,
+         `BIO15 precip. seasonality (%)` = BIO15) |>
+  knitr::kable(digits = 1)
+```
+
+The WorldClim annual precipitation (BIO12) confirms the problem found in
+Block 4: P_F from FLUXNET is about four times higher than BIO12 at US-UiB
+and about three times higher at CN-Zha, while it is close to BIO12 at the
+other three towers.
+
+### Soil (SoilGrids 2.0, 0–30 cm)
+
+```{r portrait-soil}
+site_static |>
+  mutate(CN = soil0_30_soc / soil0_30_nitrogen) |>
+  select(Site = site_id,
+         `Clay (%)` = soil0_30_clay, `Sand (%)` = soil0_30_sand,
+         `Silt (%)` = soil0_30_silt,
+         `SOC (g/kg)` = soil0_30_soc, `N (g/kg)` = soil0_30_nitrogen,
+         `C:N (-)` = CN, `pH (-)` = soil0_30_phh2o,
+         `Bulk density (kg/dm³)` = soil0_30_bdod,
+         `CEC (cmol(c)/kg)` = soil0_30_cec) |>
+  knitr::kable(digits = 2)
+```
+
+### Plant traits (PlantTraits, community-weighted means) and species records (iNaturalist, 5 km)
+
+```{r portrait-plants}
+site_static |>
+  select(Site = site_id,
+         `SLA (m²/kg)` = SLA,
+         `Leaf N mass (mg/g)` = leaf_N_mass,
+         `Leaf N area (g/m²)` = leaf_N_area,
+         `Stem density (g/cm³)` = stem_density,
+         `Rooting depth (m)` = rooting_depth,
+         `Leaf area (mm²)` = leaf_area,
+         `Plant height* (m)` = plant_height,
+         `Observations (n)` = n_obs,
+         `Species (n)` = n_species,
+         `Plant species (n)` = n_plant_species) |>
+  knitr::kable(digits = 2)
+```
+
+\* Plant height is an experimental map (cross-validated r < 0.5). The
+PlantTraits area-of-applicability flag is 0 for all traits at all towers
+(see Section 4). Species counts are not comparable between towers: they
+depend on how many people observe near each tower, not only on biodiversity.
+At US-UiB, the script retrieved only 3,000 of 26,911 observations, so its
+species counts are underestimated.
+
 ## 3. Greenness and GPP
+
+NDVI and EVI were computed from the MODIS MOD13Q1 red, NIR and blue
+reflectances (own values) and compared with the NDVI and EVI products
+delivered by MODIS. Both use the same 9 × 9 pixel window (about 2 × 2 km)
+around each tower and only pixels with reliability 0 (good) or 1 (marginal).
+The MODIS product bands were not included in the course script and were
+downloaded separately (`scripts/block5/08b_modis_product_vi.R`). MODIS covers
+the last three years of each tower record.
+
+```{r vi-data}
+modis_own  <- read_csv("data/external/modis/modis_vi_my_sites.csv", show_col_types = FALSE)
+modis_prod <- read_csv("data/external/modis/modis_product_vi_my_sites.csv", show_col_types = FALSE)
+
+vi <- modis_own |>
+  select(site_id, date, own_ndvi = ndvi, own_evi = evi) |>
+  inner_join(modis_prod, by = c("site_id", "date"))
+
+# Check: eigene Werte gegen MODIS-Produkt
+vi |>
+  summarise(`Dates`             = n(),
+            `r NDVI`            = cor(own_ndvi, modis_ndvi, use = "complete.obs"),
+            `Mean abs. diff. NDVI (-)` = mean(abs(own_ndvi - modis_ndvi), na.rm = TRUE),
+            `r EVI`             = cor(own_evi, modis_evi, use = "complete.obs"),
+            `Mean abs. diff. EVI (-)`  = mean(abs(own_evi - modis_evi), na.rm = TRUE),
+            .by = site_id) |>
+  rename(Site = site_id) |>
+  knitr::kable(digits = 3)
+```
+
+```{r vi-figure}
+#| fig-cap: "Daily GPP (top) and NDVI and EVI (bottom) for each tower over the MODIS period. Own values (filled) and MODIS products (open) overlap almost exactly."
+#| fig-height: 6
+#| fig-width: 12
+# Tägliche GPP aus den Block-4-Daten (mit VUT/CUT- und NT/DT-Ersatz)
+gpp_daily <- all_hh |>
+  mutate(date = as.Date(time)) |>
+  summarise(GPP = mean(GPP) * 1.0378, .by = c(site, date)) |>
+  rename(site_id = site)
+
+rng <- vi |> summarise(start = min(date), end = max(date), .by = site_id)
+
+gpp_plot <- gpp_daily |>
+  inner_join(rng, by = "site_id") |>
+  filter(date >= start, date <= end) |>
+  mutate(panel = "GPP (g C/m²/d)")
+
+vi_long <- vi |>
+  pivot_longer(c(own_ndvi, own_evi, modis_ndvi, modis_evi),
+               names_to = c("source", "index"), names_sep = "_") |>
+  mutate(index  = toupper(index),
+         source = if_else(source == "own", "Own", "MODIS"),
+         panel  = "NDVI / EVI (-)")
+
+ggplot() +
+  geom_line(data = gpp_plot, aes(date, GPP), colour = "darkgreen", linewidth = 0.3) +
+  geom_point(data = vi_long, aes(date, value, colour = index, shape = source),
+             size = 1.6, alpha = 0.8) +
+  facet_grid(panel ~ site_id, scales = "free", switch = "y") +
+  scale_shape_manual(values = c(Own = 16, MODIS = 1)) +
+  labs(x = "Date", y = NULL, colour = "Index", shape = "Source") +
+  theme_minimal(base_size = 11) +
+  theme(strip.placement = "outside", legend.position = "top",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+```
+Own and MODIS NDVI agree exactly (r = 1) at all towers; EVI agrees almost
+exactly (r ≥ 0.999). At US-UiB, no GPP is available for the MODIS period
+(2022–2024), because GPP and RECO are missing after about 2022 at this site.
+IT-Tor has the fewest valid dates (44), as many winter scenes are flagged as
+snow or cloud and removed.
 
 ## 4. My question: soil C:N and light-use efficiency
 
@@ -168,4 +304,71 @@ towers within a similar climate, for example using the data of the whole class.
 
 ## 5. Scale
 
+The flux footprint, the area the tower actually measures, is roughly
+100 m to 1 km. The external datasets see very different areas:
+
+```{r scale}
+tibble::tribble(
+  ~Dataset,       ~`Pixel / area`,             ~`Compared with footprint`, ~`What it means for my answer`,
+  "SoilGrids",    "250 m",                     "similar",                  "Right scale for C:N, but a model prediction; at CN-Zha the pixel seems to show the dry surroundings (pH 8.4, low SOC), not the wetland.",
+  "PlantTraits",  "1 km",                      "similar to larger",        "Mixes vegetation types around the tower; croplands and wetlands are poorly covered; AOA unclear.",
+  "MODIS",        "250 m, 9 × 9 px (~2 × 2 km)", "larger",                 "The window includes land cover around the tower (other fields at US-UiB, desert/oasis at CN-Zha); greenness is not only the footprint.",
+  "WorldClim",    "5′ (~9 km)",                "much larger",              "Regional climate only; in mountains (IT-Tor, JP-Fhk) one cell mixes very different elevations.",
+  "iNaturalist",  "5 km radius",               "much larger",              "Records cluster along roads and towns; counts describe observers as much as species."
+) |>
+  knitr::kable()
+```
+
+For my question, the most important scale issue is SoilGrids: the 250 m
+pixel matches the footprint in size, but at CN-Zha it probably does not
+represent the wetland soil. The C:N value used for this tower is therefore
+uncertain. LUE itself comes from the tower and represents the footprint.
+
 ## Data and citation
+
+**Time zone.** FLUXNET days are local standard time (no daylight saving).
+MODIS dates are the start dates of the 16-day composites. ERA5-Land was not
+used in this report.
+
+**FLUXNET site data.** Each site's data citation from the FLUXNET Shuttle
+snapshot:
+
+```{r citations}
+#| results: asis
+#| echo: false
+snapshot_file <- list.files("data/snapshots", pattern = "\\.csv$", full.names = TRUE)[1]
+read_csv(snapshot_file, show_col_types = FALSE) |>
+  filter(site_id %in% site_static$site_id) |>
+  distinct(site_id, .keep_all = TRUE) |>
+  mutate(line = paste0("- **", site_id, "**: ", product_citation)) |>
+  pull(line) |>
+  cat(sep = "\n")
+```
+
+- Pastorello, G. et al. (2020): The FLUXNET2015 dataset and the ONEFlux
+  processing pipeline for eddy covariance data. *Scientific Data* 7, 225.
+  <https://doi.org/10.1038/s41597-020-0534-3>
+
+**External datasets** (access dates in Section 1):
+
+- **SoilGrids 2.0:** Poggio, L. et al. (2021): SoilGrids 2.0: producing soil
+  information for the globe with quantified spatial uncertainty. *SOIL* 7,
+  217–240. Data: ISRIC, soilgrids.org.
+- **PlantTraits:** Lusk et al. (2026), *Nature Communications* 17, 1203.
+  Data: planttraits.earth, <https://doi.org/10.5281/zenodo.14646322>.
+- **WorldClim 2.1:** Fick, S. E. & Hijmans, R. J. (2017): WorldClim 2: new
+  1-km spatial resolution climate surfaces for global land areas.
+  *International Journal of Climatology* 37, 4302–4315. Data: worldclim.org.
+- **iNaturalist:** iNaturalist contributors (2026), research-grade
+  observations accessed via api.inaturalist.org/v1 on 2026-11-20.
+- **MODIS MOD13Q1:** Didan, K. (2021): MODIS/Terra Vegetation Indices 16-Day
+  L3 Global 250m SIN Grid V061. NASA LP DAAC,
+  <https://doi.org/10.5067/MODIS/MOD13Q1.061>. Accessed through the ORNL DAAC
+  MODIS subset service, <https://doi.org/10.3334/ORNLDAAC/1557>.
+
+**Acknowledgement.**
+
+> FLUXNET data products were produced and harmonized by eddy covariance regional networks and data
+> processing centers, including AmeriFlux, ChinaFlux, European Fluxes Database, ICOS, JapanFlux, KoFlux,
+> OzFlux, SAEON, and TERN. These products also include a modified version of ERA5 hourly data provided by
+> the Copernicus Climate Change Service.
