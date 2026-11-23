@@ -41,6 +41,9 @@ soil   <- read_csv("data/external/soilgrids/soilgrids_my_sites.csv", show_col_ty
 traits <- read_csv("data/external/planttraits/planttraits_my_sites.csv", show_col_types = FALSE)
 ```
 
+**Source code:** <https://github.com/Algaistrahlt/datascience_env_monit>
+(report: `reports/w05_ma447_neighbours.qmd`)
+
 ## 1. Data and provenance
 
 Five external datasets were added to the FLUXNET data from Block 4. All were
@@ -194,10 +197,15 @@ ggplot() +
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 Own and MODIS NDVI agree exactly (r = 1) at all towers; EVI agrees almost
-exactly (r ≥ 0.999). At US-UiB, no GPP is available for the MODIS period
-(2022–2024), because GPP and RECO are missing after about 2022 at this site.
-IT-Tor has the fewest valid dates (44), as many winter scenes are flagged as
-snow or cloud and removed.
+exactly (r ≥ 0.999). IT-Tor has the fewest valid dates (44).
+
+At CN-Zha, IT-Tor and JP-Fhk, NDVI and EVI follow the seasonal course of
+GPP: both rise in spring, peak in summer and drop in autumn. At the tropical
+forest site BR-Ma2, in contrast, NDVI stays high (about 0.85) throughout the
+year, while GPP varies considerably. In such a dense, evergreen canopy NDVI
+is saturated, so changes in photosynthesis are not visible as changes in
+greenness. At US-UiB, no comparison is possible because GPP is missing for
+the MODIS period (2022–2024).
 
 ## 4. My question: soil C:N and light-use efficiency
 
@@ -211,9 +219,8 @@ higher LUE, because more nitrogen allows more photosynthetic capacity per leaf.
 from SoilGrids, thickness-weighted over 0–30 cm. LUE is the sum of daily GPP
 (g C m⁻² d⁻¹) divided by the sum of daily incoming shortwave radiation
 SW_IN_F (MJ m⁻² d⁻¹) over the three months with the highest mean GPP at each
-site. Leaf nitrogen per mass from PlantTraits is shown as a second possible
-link between soil and photosynthesis.
-
+site. Leaf nitrogen per mass from PlantTraits is listed in the table but not used
+to answer the question (see below).
 ```{r q-data}
 # Topsoil 0–30 cm, gewichtet nach Schichtdicke
 soil_top <- soil |>
@@ -262,45 +269,93 @@ q |>
          `LUE (g C MJ⁻¹)` = LUE) |>
   knitr::kable(digits = 2)
 ```
-The PlantTraits area-of-applicability flag (`_aoa`) is 0 for all traits at all
-five towers. It is not yet clear whether 0 means inside or outside the area of
-applicability; the leaf N values should therefore be read with caution.
+To account for the fact that dense canopies absorb more of the incoming
+light, LUE was also computed per absorbed light, using EVI as a simple proxy
+for the absorbed fraction: LUE (absorbed) = GPP / (SW_IN_F × EVI). Daily EVI
+was linearly interpolated between the 16-day MODIS dates. This is only
+possible for the MODIS period (last three tower years); US-UiB has no GPP in
+this period and is excluded (n = 4).
+
+```{r q-evi}
+# EVI täglich interpolieren (zwischen den 16-Tage-Terminen)
+evi_d <- vi |>
+  filter(!is.na(own_evi)) |>
+  group_by(site_id) |>
+  reframe({
+    d <- seq(min(date), max(date), by = "day")
+    e <- approx(date, own_evi, xout = d)$y
+    tibble(date = d, evi = e)
+  })
+
+peak_s <- peak |> rename(site_id = site)
+
+lue_evi <- daily |>
+  rename(site_id = site) |>
+  semi_join(peak_s, by = c("site_id", "month")) |>
+  inner_join(evi_d, by = c("site_id", "date")) |>
+  filter(!is.na(GPP), !is.na(SW), !is.na(evi)) |>
+  summarise(LUE_same   = sum(GPP) / sum(SW),        # gleiche Tage, einfallendes Licht
+            LUE_abs    = sum(GPP) / sum(SW * evi),  # pro absorbiertem Licht
+            n_days_evi = n(),
+            .by = site_id)
+
+q <- q |> left_join(lue_evi, by = "site_id")
+
+q |>
+  select(Site = site_id, `C:N (-)` = CN,
+         `LUE full record (g C/MJ)` = LUE,
+         `LUE MODIS period (g C/MJ)` = LUE_same,
+         `LUE absorbed (g C/MJ)` = LUE_abs,
+         `Days (MODIS period)` = n_days_evi) |>
+  knitr::kable(digits = 2)
+```
+The PlantTraits area-of-applicability flag (`_aoa`) is 0 for all traits at
+all five towers. It is not yet clear whether 0 means inside or outside the
+area of applicability, so leaf N is not interpreted.
 ```{r q-figure}
-#| fig-cap: "Peak-season light-use efficiency against topsoil C:N (SoilGrids, 0–30 cm) and community leaf nitrogen (PlantTraits). n = 5 towers."
+#| fig-cap: "Peak-season light-use efficiency per incoming light (left, full record, n = 5) and per absorbed light (right, GPP / (SW_IN × EVI), MODIS period, n = 4) against topsoil C:N (SoilGrids, 0–30 cm)."
 #| fig-height: 4.5
 #| fig-width: 9
 q |>
-  select(site_id, LUE,
-         `Topsoil C:N (-)` = CN,
-         `Leaf N (mg/g)` = leaf_N_mass) |>
-  pivot_longer(-c(site_id, LUE), names_to = "driver") |>
-  ggplot(aes(value, LUE, label = site_id)) +
+  select(site_id, CN,
+         `LUE per incoming light (full record)` = LUE,
+         `LUE per absorbed light (MODIS period)` = LUE_abs) |>
+  pivot_longer(-c(site_id, CN), names_to = "measure") |>
+    mutate(measure = factor(measure, levels = c("LUE per incoming light (full record)",
+                                              "LUE per absorbed light (MODIS period)"))) |>
+  filter(!is.na(value)) |>
+  ggplot(aes(CN, value, label = site_id)) +
   geom_point(size = 3) +
   ggrepel::geom_text_repel(size = 3.5, box.padding = 0.5) +
-  facet_wrap(~ driver, scales = "free_x", strip.position = "bottom") +
+  facet_wrap(~ measure, scales = "free_y") +
   scale_x_continuous(expand = expansion(mult = 0.15)) +
   scale_y_continuous(expand = expansion(mult = 0.15)) +
-  labs(x = NULL, y = expression("Peak-season LUE (g C MJ"^-1*")")) +
-  theme_minimal(base_size = 13) +
-  theme(strip.placement = "outside")
+  labs(x = "Topsoil C:N (-)", y = expression("LUE (g C MJ"^-1*")")) +
+  theme_minimal(base_size = 13)
 ```
 
-The figure does not support the hypothesis. BR-Ma2 shows the highest LUE,
-although it has the second-highest C:N ratio (about 13). The lowest LUE, in
-contrast, occurs at IT-Tor, which also has the highest C:N ratio (about 15).
-Both the low LUE and the high soil carbon content at IT-Tor can be explained
-by the characteristics of this alpine site: the short growing season and low
-temperatures limit photosynthesis as well as the microbial decomposition of
-organic matter, so carbon accumulates in the soil. It is therefore likely that
-any nitrogen signal is masked by more dominant climate controls.
-With only five towers (n = 5) in very different climates, this comparison is
-descriptive and cannot test a statistical relationship; differences in
-vegetation type, management (e.g. fertilisation at the US-UiB cropland) and
-partitioning method (DT at BR-Ma2, NT elsewhere) may also affect LUE.
-In addition, the low soil carbon, low C:N and high pH (8.4) at CN-Zha suggest
-that the 250 m SoilGrids pixel represents the surrounding dry soils rather
-than the wetland itself. Testing the hypothesis properly would require more
-towers within a similar climate, for example using the data of the whole class.
+Neither the table nor the figure supports the hypothesis: apart from IT-Tor,
+LUE per incoming light increases with C:N, from CN-Zha (C:N 6.4, LUE 0.45) to
+BR-Ma2 (C:N 13.3, LUE 0.68), which is the opposite of the expected direction.
+IT-Tor is a special case: at this alpine site, the short growing season and
+low temperatures limit photosynthesis as well as the microbial decomposition
+of organic matter, so it combines the highest C:N with the lowest LUE.
+Per absorbed light, the pattern becomes much weaker: CN-Zha moves up to the
+level of JP-Fhk (1.15 vs. 1.17 g C MJ⁻¹), which suggests that its low LUE per
+incoming light reflects a sparse canopy rather than inefficient leaves, although part of this jump may be a scale
+artefact (see Section 5).
+LUE per incoming light therefore partly measures canopy cover, which differs
+strongly between my sites.
+With only five towers (n = 5, and n = 4 per absorbed light) in very different
+climates, the comparison is descriptive, and any nitrogen signal is likely
+masked by climate, vegetation type, management (e.g. harvest at US-UiB) and
+partitioning method (DT at BR-Ma2).
+Moreover, 50–76 % of the NEE half hours are gap-filled using incoming
+radiation as a driver, so GPP and SW_IN are partly linked by construction.
+At CN-Zha, the low soil carbon, low C:N and high pH (8.4) suggest that the
+SoilGrids pixel represents the surrounding dry soils rather than the wetland.
+Testing the hypothesis properly would require more towers within a similar
+climate, for example the data of the whole class.class.
 
 ## 5. Scale
 
@@ -322,7 +377,10 @@ tibble::tribble(
 For my question, the most important scale issue is SoilGrids: the 250 m
 pixel matches the footprint in size, but at CN-Zha it probably does not
 represent the wetland soil. The C:N value used for this tower is therefore
-uncertain. LUE itself comes from the tower and represents the footprint.
+uncertain. Scale also matters for LUE per absorbed light: at CN-Zha, the 2 × 2 km MODIS
+window probably includes drier surroundings with lower EVI than the wetland
+footprint, which would make its LUE per absorbed light too high. LUE per
+incoming light, in contrast, uses only tower data and represents the footprint.
 
 ## Data and citation
 
