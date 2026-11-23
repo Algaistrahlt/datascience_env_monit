@@ -1,0 +1,155 @@
+---
+title: "The neighbourhood of my five flux towers"
+author: "Matti Allgaier"
+date: today
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+knitr::opts_knit$set(root.dir = normalizePath(".."))
+```
+
+```{r load-data}
+#| include: false
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Flux data from Block 4
+source("scripts/read_hh.R")
+dir.create("data/processed", recursive = TRUE, showWarnings = FALSE)
+cache_file <- "data/processed/all_hh.rds"
+if (file.exists(cache_file)) {
+  all_hh <- readRDS(cache_file)
+} else {
+  zips   <- list.files("data/raw", pattern = "\\.zip$", full.names = TRUE)
+  all_hh <- bind_rows(lapply(zips, read_hh))
+  saveRDS(all_hh, cache_file)
+}
+
+# Block 5 datasets
+soil   <- read_csv("data/external/soilgrids/soilgrids_my_sites.csv", show_col_types = FALSE)
+traits <- read_csv("data/external/planttraits/planttraits_my_sites.csv", show_col_types = FALSE)
+```
+
+## 1. Data and provenance
+
+## 2. Site portrait
+
+## 3. Greenness and GPP
+
+## 4. My question: soil C:N and light-use efficiency
+
+**Question.** Is the topsoil C:N ratio related to ecosystem light-use
+efficiency (LUE) during the peak growing season across my five towers?
+
+**Hypothesis.** Sites with a lower C:N ratio (more available nitrogen) have a
+higher LUE, because more nitrogen allows more photosynthetic capacity per leaf.
+
+**Method.** Topsoil C:N is the ratio of soil organic carbon to total nitrogen
+from SoilGrids, thickness-weighted over 0–30 cm. LUE is the sum of daily GPP
+(g C m⁻² d⁻¹) divided by the sum of daily incoming shortwave radiation
+SW_IN_F (MJ m⁻² d⁻¹) over the three months with the highest mean GPP at each
+site. Leaf nitrogen per mass from PlantTraits is shown as a second possible
+link between soil and photosynthesis.
+
+```{r q-data}
+# Topsoil 0–30 cm, gewichtet nach Schichtdicke
+soil_top <- soil |>
+  filter(top_cm < 30) |>
+  mutate(w = bottom_cm - top_cm) |>
+  summarise(value = weighted.mean(mean, w), .by = c(site_id, property)) |>
+  pivot_wider(names_from = property, values_from = value) |>
+  mutate(CN = soc / nitrogen)
+
+# Tageswerte
+daily <- all_hh |>
+  mutate(date = as.Date(time)) |>
+  summarise(GPP = mean(GPP) * 1.0378,       # g C m⁻² d⁻¹
+            SW  = mean(SW_IN_F) * 0.0864,   # MJ m⁻² d⁻¹
+            .by = c(site, date)) |>
+  mutate(month = as.integer(format(date, "%m")))
+
+# Die drei Monate mit der höchsten mittleren GPP
+peak <- daily |>
+  summarise(gpp_month = mean(GPP, na.rm = TRUE), .by = c(site, month)) |>
+  group_by(site) |>
+  slice_max(gpp_month, n = 3) |>
+  ungroup() |>
+  select(site, month)
+
+# Lichtnutzungseffizienz
+lue <- daily |>
+  semi_join(peak, by = c("site", "month")) |>
+  filter(!is.na(GPP), !is.na(SW)) |>
+  summarise(LUE         = sum(GPP) / sum(SW),
+            n_days      = n(),
+            peak_months = paste(sort(unique(month)), collapse = ", "),
+            .by = site) |>
+  rename(site_id = site)
+
+q <- lue |>
+  left_join(soil_top |> select(site_id, soc, nitrogen, CN), by = "site_id") |>
+  left_join(traits |> select(site_id, leaf_N_mass, leaf_N_mass_aoa), by = "site_id") |>
+  arrange(CN)
+
+q |>
+  select(Site = site_id,
+         `SOC (g kg⁻¹)` = soc, `N (g kg⁻¹)` = nitrogen, `C:N (–)` = CN,
+         `Leaf N (mg g⁻¹)` = leaf_N_mass, `Leaf N AOA` = leaf_N_mass_aoa,
+         `Peak months` = peak_months, `Days` = n_days,
+         `LUE (g C MJ⁻¹)` = LUE) |>
+  knitr::kable(digits = 2)
+```
+The PlantTraits area-of-applicability flag (`_aoa`) is 0 for all traits at all
+five towers. It is not yet clear whether 0 means inside or outside the area of
+applicability; the leaf N values should therefore be read with caution.
+```{r q-figure}
+#| fig-cap: "Peak-season light-use efficiency against topsoil C:N (SoilGrids, 0–30 cm) and community leaf nitrogen (PlantTraits). n = 5 towers."
+#| fig-height: 4.5
+#| fig-width: 9
+q |>
+  select(site_id, LUE,
+         `Topsoil C:N (-)` = CN,
+         `Leaf N (mg/g)` = leaf_N_mass) |>
+  pivot_longer(-c(site_id, LUE), names_to = "driver") |>
+  ggplot(aes(value, LUE, label = site_id)) +
+  geom_point(size = 3) +
+  ggrepel::geom_text_repel(size = 3.5, box.padding = 0.5) +
+  facet_wrap(~ driver, scales = "free_x", strip.position = "bottom") +
+  scale_x_continuous(expand = expansion(mult = 0.15)) +
+  scale_y_continuous(expand = expansion(mult = 0.15)) +
+  labs(x = NULL, y = expression("Peak-season LUE (g C MJ"^-1*")")) +
+  theme_minimal(base_size = 13) +
+  theme(strip.placement = "outside")
+```
+
+The figure does not support the hypothesis. BR-Ma2 shows the highest LUE,
+although it has the second-highest C:N ratio (about 13). The lowest LUE, in
+contrast, occurs at IT-Tor, which also has the highest C:N ratio (about 15).
+Both the low LUE and the high soil carbon content at IT-Tor can be explained
+by the characteristics of this alpine site: the short growing season and low
+temperatures limit photosynthesis as well as the microbial decomposition of
+organic matter, so carbon accumulates in the soil. It is therefore likely that
+any nitrogen signal is masked by more dominant climate controls.
+With only five towers (n = 5) in very different climates, this comparison is
+descriptive and cannot test a statistical relationship; differences in
+vegetation type, management (e.g. fertilisation at the US-UiB cropland) and
+partitioning method (DT at BR-Ma2, NT elsewhere) may also affect LUE.
+In addition, the low soil carbon, low C:N and high pH (8.4) at CN-Zha suggest
+that the 250 m SoilGrids pixel represents the surrounding dry soils rather
+than the wetland itself. Testing the hypothesis properly would require more
+towers within a similar climate, for example using the data of the whole class.
+
+## 5. Scale
+
+## Data and citation
